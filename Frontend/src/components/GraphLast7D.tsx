@@ -6,14 +6,20 @@ interface GraphData {
   timestamp: string;
 }
 
-const GraphLast7D: React.FC = () => {
+interface GraphProps {
+  deviceId: string;
+}
+
+const GraphLast7D: React.FC<GraphProps> = ({ deviceId }) => {
   const [data, setData] = useState<GraphData[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!deviceId) return;
+
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/moisture/sensor1/last7d');
+        const response = await fetch(`http://localhost:3000/api/moisture/${deviceId}/last7d`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -25,8 +31,12 @@ const GraphLast7D: React.FC = () => {
         console.error(err);
       }
     };
+
     fetchData();
-  }, []);
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+
+  }, [deviceId]);
 
   const chartData = {
     labels: data.map(d => d.timestamp),

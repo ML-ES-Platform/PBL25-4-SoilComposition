@@ -1,13 +1,17 @@
 import React from 'react';
-import MoistureSensor from './MoistureSensor.tsx';
-import GraphsField from './GraphsField.tsx';
+import MoistureSensor from './MoistureSensor';
+import GraphsField from './GraphsField';
 
-const Body: React.FC = () => {
+interface BodyProps {
+  deviceId: string;
+}
+
+const Body: React.FC<BodyProps> = ({ deviceId }) => {
   console.log('Body component rendered');
   return (
     <div className="body-container">
-      <MoistureSensor />
-      <GraphsField />
+      <MoistureSensor deviceId={deviceId} />
+      <GraphsField deviceId={deviceId} />
     </div>
   );
 };

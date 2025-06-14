@@ -6,14 +6,20 @@ interface MoistureData {
   next_hour: number | null;
 }
 
-const MoistureSensor: React.FC = () => {
+interface SensorProps {
+  deviceId: string;
+}
+
+const MoistureSensor: React.FC<SensorProps> = ({ deviceId }) => {
   const [data, setData] = useState<MoistureData>({ last_hour: null, current: null, next_hour: null });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!deviceId) return; // Don't fetch if no device is selected
+
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/moisture/sensor1');
+        const response = await fetch(`http://localhost:3000/api/moisture/${deviceId}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -27,7 +33,11 @@ const MoistureSensor: React.FC = () => {
     };
 
     fetchData();
-  }, []);
+    // Set up a polling interval to refresh the data every 5 seconds
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
+
+  }, [deviceId]); // Re-run the effect if the deviceId changes
 
   return (
     <div className="moisture-sensor">

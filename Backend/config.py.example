@@ -1,0 +1,17 @@
+# Database Configuration
+DB_PARAMS = {
+    'dbname': 'your_db_name',
+    'user': 'your_db_user',
+    'password': 'your_db_password',
+    'host': 'localhost',
+    'port': '5432'
+}
+
+# HiveMQ Cloud MQTT Broker Configuration
+MQTT_PARAMS = {
+    'broker': 'your_cluster_url.s1.eu.hivemq.cloud',
+    'port': 8883,
+    'topic': 'sensors/moisture/#',
+    'username': 'your_mqtt_username',
+    'password': 'your_mqtt_password'
+} 

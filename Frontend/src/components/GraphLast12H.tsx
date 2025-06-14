@@ -6,14 +6,20 @@ interface GraphData {
   timestamp: string;
 }
 
-const GraphLast12H: React.FC = () => {
+interface GraphProps {
+  deviceId: string;
+}
+
+const GraphLast12H: React.FC<GraphProps> = ({ deviceId }) => {
   const [data, setData] = useState<GraphData[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!deviceId) return;
+
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:3000/api/moisture/sensor1/last12h');
+        const response = await fetch(`http://localhost:3000/api/moisture/${deviceId}/last12h`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -25,8 +31,13 @@ const GraphLast12H: React.FC = () => {
         console.error(err);
       }
     };
+
     fetchData();
-  }, []);
+    // Refresh data every 10 seconds
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+
+  }, [deviceId]);
 
   const chartData = {
     labels: data.map(d => d.timestamp),

@@ -6,7 +6,10 @@ import sys
 import logging
 import os
 from datetime import datetime, timedelta
-from config import DB_PARAMS
+from config import DB_PARAMS, MQTT_PARAMS
+import paho.mqtt.client as mqtt
+import json
+import threading
 
 # Set up logging
 logging.basicConfig(
@@ -22,52 +25,95 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-@app.route('/moisture', methods=['POST'])
-def insert_moisture():
+# --- Database Functions ---
+def get_db_connection():
+    """Establishes a connection to the PostgreSQL database."""
+    return psycopg2.connect(**DB_PARAMS)
+
+def insert_moisture_data(device_id, moisture_value):
+    """Inserts a new moisture reading into the database."""
     try:
-        data = request.json
-        device_id = data.get('device_id')
-        moisture_value = data.get('moisture_value')
-        timestamp = data.get('timestamp')
-        
-        if not device_id or moisture_value is None:
-            logger.warning("Missing device_id or moisture_value in request")
-            return jsonify({'error': 'Missing device_id or moisture_value'}), 400
-        
-        conn = psycopg2.connect(**DB_PARAMS)
+        conn = get_db_connection()
         cursor = conn.cursor()
-        
-        if timestamp:
-            insert_query = """
-            INSERT INTO moisture_data (device_id, moisture_value, timestamp)
-            VALUES (%s, %s, %s)
-            """
-            cursor.execute(insert_query, (device_id, moisture_value, timestamp))
-            logger.info(f"Inserted data with timestamp: {device_id}, {moisture_value}, {timestamp}")
-        else:
-            insert_query = """
-            INSERT INTO moisture_data (device_id, moisture_value)
-            VALUES (%s, %s)
-            """
-            cursor.execute(insert_query, (device_id, moisture_value))
-            logger.info(f"Inserted data: {device_id}, {moisture_value}")
-        
+        query = "INSERT INTO moisture_data (device_id, moisture_value) VALUES (%s, %s)"
+        cursor.execute(query, (device_id, float(moisture_value)))
         conn.commit()
         cursor.close()
         conn.close()
-        return jsonify({'message': 'Data inserted successfully'}), 201
-        
+        logger.info(f"Inserted data for device_id: {device_id}, value: {moisture_value}")
     except psycopg2.Error as e:
-        logger.error(f"Database error during insert: {e}")
-        return jsonify({'error': f"Database error: {e}"}), 500
+        logger.error(f"Database insert error: {e}")
     except Exception as e:
-        logger.error(f"Unexpected error during insert: {e}")
-        return jsonify({'error': f"Error: {e}"}), 500
+        logger.error(f"Error inserting data: {e}")
+
+# --- MQTT Client Setup ---
+def on_connect(client, userdata, flags, rc, properties=None):
+    """Callback for when the client connects to the broker."""
+    if rc == 0:
+        logger.info("Connected to MQTT Broker!")
+        client.subscribe(MQTT_PARAMS['topic'])
+        logger.info(f"Subscribed to topic: {MQTT_PARAMS['topic']}")
+    else:
+        logger.error(f"Failed to connect, return code {rc}\n")
+
+def on_message(client, userdata, msg):
+    """Callback for when a message is received from the broker."""
+    try:
+        topic_parts = msg.topic.split('/')
+        if len(topic_parts) >= 3:
+            device_id = topic_parts[-1]
+            payload = json.loads(msg.payload.decode())
+            moisture_value = payload.get('moisture_value')
+            
+            if moisture_value is not None:
+                insert_moisture_data(device_id, moisture_value)
+            else:
+                logger.warning(f"Message from {device_id} is missing 'moisture_value'")
+        else:
+            logger.warning(f"Received message on unexpected topic: {msg.topic}")
+            
+    except json.JSONDecodeError:
+        logger.error(f"Failed to decode JSON from topic {msg.topic}: {msg.payload.decode()}")
+    except Exception as e:
+        logger.error(f"Error processing message from topic {msg.topic}: {e}")
+
+def setup_mqtt_client():
+    """Configures and starts the MQTT client."""
+    client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    client.username_pw_set(MQTT_PARAMS['username'], MQTT_PARAMS['password'])
+    client.on_connect = on_connect
+    client.on_message = on_message
+    
+    # Setup TLS for secure connection
+    client.tls_set(tls_version=mqtt.ssl.PROTOCOL_TLS)
+    
+    try:
+        client.connect(MQTT_PARAMS['broker'], MQTT_PARAMS['port'], 60)
+        client.loop_start() # Starts a background thread to handle network traffic
+        return client
+    except Exception as e:
+        logger.error(f"Could not connect to MQTT broker: {e}")
+        return None
+
+@app.route('/api/sensors', methods=['GET'])
+def get_sensors():
+    """Returns a list of unique sensor IDs that have sent data."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT device_id FROM moisture_data ORDER BY device_id")
+        sensors = [row[0] for row in cursor.fetchall()]
+        cursor.close()
+        conn.close()
+        return jsonify(sensors)
+    except Exception as e:
+        logger.error(f"API Error in /api/sensors: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/moisture/<device_id>', methods=['GET'])
 def get_moisture(device_id):
     try:
-        conn = psycopg2.connect(**DB_PARAMS)
+        conn = get_db_connection()
         cursor = conn.cursor()
         
         logger.info(f"Fetching current moisture for device_id: {device_id}")
@@ -132,69 +178,59 @@ def get_moisture(device_id):
 @app.route('/api/moisture/<device_id>/last12h', methods=['GET'])
 def get_last_12h(device_id):
     try:
-        conn = psycopg2.connect(**DB_PARAMS)
+        conn = get_db_connection()
         cursor = conn.cursor()
-
-        logger.info(f"Fetching last 12 hours data for device_id: {device_id}")
-
-        # Find the latest timestamp for the device
-        cursor.execute("""
-            SELECT MAX(timestamp) FROM moisture_data WHERE device_id = %s
-        """, (device_id,))
+        
+        cursor.execute("SELECT MAX(timestamp) FROM moisture_data WHERE device_id = %s", (device_id,))
         latest_timestamp = cursor.fetchone()[0]
 
         if not latest_timestamp:
-            logger.warning(f"No data found for device_id: {device_id}")
             return jsonify([]), 200
 
-        # Calculate the 12-hour window before the latest timestamp
         twelve_hours_before_latest = latest_timestamp - timedelta(hours=12)
 
         cursor.execute("""
-            SELECT AVG(moisture_value) as avg_value,
+            SELECT AVG(moisture_value) as avg_value, DATE_TRUNC('hour', timestamp) as hour_bucket
+            FROM moisture_data
+            WHERE device_id = %s AND timestamp >= %s AND timestamp <= %s
+            GROUP BY hour_bucket ORDER BY hour_bucket ASC
+        """, (device_id, twelve_hours_before_latest, latest_timestamp))
+        
+        data = cursor.fetchall()
+        result = [{'value': round(float(row[0]), 2), 'timestamp': row[1].strftime('%H:%M')} for row in data]
+        
+        cursor.close()
+        conn.close()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"API Error in /last12h: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/moisture/<device_id>/last24h', methods=['GET'])
+def get_last_24h(device_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        logger.info(f"Fetching last 24 hours data for device_id: {device_id}")
+
+        cursor.execute("SELECT MAX(timestamp) FROM moisture_data WHERE device_id = %s", (device_id,))
+        latest_timestamp = cursor.fetchone()[0]
+
+        if not latest_timestamp:
+            logger.info(f"No data found for device_id: {device_id}")
+            return jsonify([]), 200
+        
+        twenty_four_hours_ago = latest_timestamp - timedelta(hours=24)
+        
+        cursor.execute("""
+            SELECT AVG(moisture_value) as avg_value, 
                    DATE_TRUNC('hour', timestamp) as hour_bucket
             FROM moisture_data
             WHERE device_id = %s AND timestamp >= %s AND timestamp <= %s
             GROUP BY DATE_TRUNC('hour', timestamp)
             ORDER BY hour_bucket ASC
-        """, (device_id, twelve_hours_before_latest, latest_timestamp))
-        data = cursor.fetchall()
-        
-        result = [
-            {
-                'value': round(float(row[0]), 2) if row[0] is not None else None,
-                'timestamp': row[1].strftime('%H:%M')
-            } for row in data
-        ]
-        
-        logger.info(f"Returning {len(result)} data points for last 12 hours")
-        
-        cursor.close()
-        conn.close()
-        return jsonify(result)
-        
-    except psycopg2.Error as e:
-        logger.error(f"Database error during last 12h fetch: {e}")
-        return jsonify({'error': f"Database error: {str(e)}"}), 500
-    except Exception as e:
-        logger.error(f"Unexpected error during last 12h fetch: {e}")
-        return jsonify({'error': f"Error: {str(e)}"}), 500
-
-@app.route('/api/moisture/<device_id>/last24h', methods=['GET'])
-def get_last_24h(device_id):
-    try:
-        conn = psycopg2.connect(**DB_PARAMS)
-        cursor = conn.cursor()
-        
-        logger.info(f"Fetching last 24 hours data for device_id: {device_id}")
-        cursor.execute("""
-            SELECT AVG(moisture_value) as avg_value, 
-                   DATE_TRUNC('hour', timestamp) as hour_bucket
-            FROM moisture_data
-            WHERE device_id = %s AND timestamp >= NOW() - INTERVAL '24 hours'
-            GROUP BY DATE_TRUNC('hour', timestamp)
-            ORDER BY hour_bucket ASC
-        """, (device_id,))
+        """, (device_id, twenty_four_hours_ago, latest_timestamp))
         data = cursor.fetchall()
         
         result = [
@@ -220,7 +256,7 @@ def get_last_24h(device_id):
 @app.route('/api/moisture/<device_id>/last7d', methods=['GET'])
 def get_last_7d(device_id):
     try:
-        conn = psycopg2.connect(**DB_PARAMS)
+        conn = get_db_connection()
         cursor = conn.cursor()
         
         logger.info(f"Fetching last 7 days data for device_id: {device_id}")
@@ -257,7 +293,7 @@ def get_last_7d(device_id):
 @app.route('/api/moisture/<device_id>/next12h', methods=['GET'])
 def get_next_12h(device_id):
     try:
-        conn = psycopg2.connect(**DB_PARAMS)
+        conn = get_db_connection()
         cursor = conn.cursor()
         
         logger.info(f"Fetching data for next 12h prediction for device_id: {device_id}")
@@ -313,5 +349,13 @@ def get_next_12h(device_id):
         return jsonify({'error': f"Error: {str(e)}"}), 500
 
 if __name__ == '__main__':
+    # Start the MQTT client
+    mqtt_client = setup_mqtt_client()
+    if not mqtt_client:
+        sys.exit("Exiting due to MQTT connection failure.")
+        
+    # Start the Flask server
+    # Note: Flask's development server is not ideal for production.
+    # The 'use_reloader=False' is important to prevent running the setup code twice.
     port = int(os.environ.get('PORT', 3000))
-    app.run(host='0.0.0.0', port=port) 
+    app.run(host='0.0.0.0', port=port, use_reloader=False) 

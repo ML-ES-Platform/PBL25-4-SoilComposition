@@ -64,6 +64,7 @@ html, body {
   flex-direction: column;
   align-items: center;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  align-self: start; /* Prevents the card from stretching vertically */
 }
 
 .moisture-sensor h2 {
@@ -112,6 +113,9 @@ html, body {
   border-radius: 16px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
 }
 
 .graphs-field h2 {
@@ -122,11 +126,22 @@ html, body {
   text-align: center;
 }
 
+.graphs-field .card-title {
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 0.75rem;
+}
+
 .graphs-flex {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.25rem;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+}
+
+.graphs-flex > * {
+  /* This selector is not needed for the explicit grid */
 }
 
 .graph-box {
@@ -143,4 +158,84 @@ html, body {
   font-weight: 500;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
   transition: transform 0.2s ease;
+}
+
+.dashboard-container {
+    padding: 1.5rem;
+    background-color: #f0f2f5;
+    min-height: 100vh;
+}
+
+.dashboard-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    align-items: start;
+}
+
+.dashboard-header h1 {
+    font-size: 2rem;
+    color: #333;
+    font-weight: 600;
+}
+
+.sensor-selector-container {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 2rem;
+}
+
+.sensor-selector-container label {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #333;
+}
+
+#sensor-selector {
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    border: 1px solid #d9d9d9;
+    background-color: #fff;
+    font-size: 1rem;
+    font-family: inherit;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%228%22%20viewBox%3D%220%200%2012%208%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M1.41%200.59L6%205.17L10.59%200.59L12%202L6%208L0%202L1.41%200.59Z%22%20fill%3D%22%23555%22/%3E%3C/svg%3E');
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    padding-right: 2.5rem; /* Make space for the arrow */
+}
+
+#sensor-selector:hover {
+    border-color: #40a9ff;
+}
+
+#sensor-selector:focus {
+    outline: none;
+    border-color: #40a9ff;
+    box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 300px 1fr; /* Sidebar and main content */
+    gap: 2rem;
+    align-items: start;
+}
+
+.loading-message {
+    text-align: center;
+    padding: 3rem;
+    font-size: 1.2rem;
+    color: #555;
+}
+
+.card {
+    background-color: #fff;
+    padding: 1.5rem;
 }

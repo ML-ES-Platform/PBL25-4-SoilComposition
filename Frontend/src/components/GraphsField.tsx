@@ -1,19 +1,20 @@
 import React from 'react';
-import GraphLast12H from './GraphLast12H.tsx';
-import GraphLast24H from './GraphLast24H.tsx';
-import GraphLast7D from './GraphLast7D.tsx';
-import GraphNext12H from './GraphNext12H.tsx';
+import GraphLast12H from './GraphLast12H';
+import GraphLast24H from './GraphLast24H';
+import GraphLast7D from './GraphLast7D';
+import GraphNext12H from './GraphNext12H';
 
-const GraphsField: React.FC = () => {
+interface GraphsFieldProps {
+  deviceId: string;
+}
+
+const GraphsField: React.FC<GraphsFieldProps> = ({ deviceId }) => {
   return (
     <div className="graphs-field">
-      <h2>Moisture Graphs</h2>
-      <div className="graphs-flex">
-        <GraphLast12H />
-        <GraphLast24H />
-        <GraphLast7D />
-        <GraphNext12H />
-      </div>
+      <GraphLast12H deviceId={deviceId} />
+      <GraphLast24H deviceId={deviceId} />
+      <GraphLast7D deviceId={deviceId} />
+      <GraphNext12H deviceId={deviceId} />
     </div>
   );
 };

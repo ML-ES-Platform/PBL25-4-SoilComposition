@@ -2,7 +2,7 @@ import React from 'react';
 
 const Header: React.FC = () => {
   return (
-    <header className="header">
+    <header className="dashboard-header">
       <h1>Soil Moisture Dashboard</h1>
     </header>
   );
