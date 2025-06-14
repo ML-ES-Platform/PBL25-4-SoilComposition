@@ -2,6 +2,7 @@ import psycopg2
 from datetime import datetime, timedelta
 import random
 import logging
+from config import DB_PARAMS
 
 # Set up logging
 logging.basicConfig(
@@ -11,20 +12,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Database connection parameters
-db_params = {
-    'host': 'localhost',
-    'user': 'postgres',
-    'password': '123qweASDZXC',
-    'port': 5432,
-    'database': 'iot_data'
-}
-
 def insert_historical_data():
     try:
         # Connect to the database
         logger.info("Connecting to 'iot_data' database...")
-        conn = psycopg2.connect(**db_params)
+        conn = psycopg2.connect(**DB_PARAMS)
         cursor = conn.cursor()
 
         # Define time range: past week (June 6 to June 13, 2025)
@@ -68,4 +60,4 @@ def insert_historical_data():
             logger.info("Database connection closed.")
 
 if __name__ == '__main__':
-    insert_historical_data()
+    insert_historical_data() 

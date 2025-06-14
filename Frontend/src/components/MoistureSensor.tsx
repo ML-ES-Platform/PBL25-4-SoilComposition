@@ -13,7 +13,7 @@ const MoistureSensor: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/moisture/sensor1');
+        const response = await fetch('http://localhost:3000/api/moisture/sensor1');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }

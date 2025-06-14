@@ -1,20 +1,16 @@
 import psycopg2
 from psycopg2 import sql
 import sys
+from config import DB_PARAMS
 
 def create_database_and_table():
     # Database connection parameters
-    db_params = {
-        'host': 'localhost',
-        'user': 'postgres',
-        'password': 'parola ta ',  # Change this if your password is different
-        'port': 5432
-    }
+    db_params = DB_PARAMS
     
-    database_name = 'iot_data'
+    database_name = db_params['database']
     
     try:
-        conn = psycopg2.connect(database='postgres', **db_params)
+        conn = psycopg2.connect(database='postgres', **{k: v for k, v in db_params.items() if k != 'database'})
         conn.autocommit = True
         cursor = conn.cursor()
         
@@ -32,7 +28,7 @@ def create_database_and_table():
         
         # Now connect to the new database to create the table
         print(f"Connecting to '{database_name}' database...")
-        conn = psycopg2.connect(database=database_name, **db_params)
+        conn = psycopg2.connect(**db_params)
         cursor = conn.cursor()
         
         # Create the moisture_data table

@@ -1,25 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-);
 
 interface GraphData {
   value: number | null;
@@ -33,7 +13,7 @@ const GraphLast7D: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/moisture/sensor1/last7d');
+        const response = await fetch('http://localhost:3000/api/moisture/sensor1/last7d');
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
