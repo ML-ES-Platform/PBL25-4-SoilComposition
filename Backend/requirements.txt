@@ -1,4 +1,7 @@
 psycopg2-binary
 Flask
 flask-cors
-paho-mqtt 
+paho-mqtt
+requests
+statsmodels
+pandas 

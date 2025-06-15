@@ -10,6 +10,9 @@ from config import DB_PARAMS, MQTT_PARAMS
 import paho.mqtt.client as mqtt
 import json
 import threading
+import pandas as pd
+from statsmodels.tsa.arima.model import ARIMA
+import warnings
 
 # Set up logging
 logging.basicConfig(
@@ -319,61 +322,87 @@ def get_last_7d(device_id):
 
 @app.route('/api/moisture/<device_id>/next12h', methods=['GET'])
 def get_next_12h(device_id):
+    """
+    Predicts the next 12 hours of moisture data using an ARIMA model.
+    """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        logger.info(f"Fetching data for next 12h prediction for device_id: {device_id}")
-        cursor.execute("""
-            SELECT moisture_value, timestamp FROM moisture_data
-            WHERE device_id = %s
-            ORDER BY timestamp DESC
-            LIMIT 1
-        """, (device_id,))
-        current = cursor.fetchone()
-        
-        if not current:
+
+        logger.info(f"Fetching data for ARIMA prediction for device_id: {device_id}")
+
+        # Get the latest timestamp for the device
+        cursor.execute("SELECT MAX(timestamp) FROM moisture_data WHERE device_id = %s", (device_id,))
+        latest_timestamp = cursor.fetchone()[0]
+
+        if not latest_timestamp:
+            logger.warning(f"No data found for device {device_id} to make a prediction.")
             return jsonify([]), 200
+
+        # Define the time window for training data (72 hours before the latest timestamp)
+        training_data_start_time = latest_timestamp - timedelta(hours=72)
+
+        # 1. Fetch the last 72 hours of hourly-averaged data to train the model
+        cursor.execute("""
+            SELECT DATE_TRUNC('hour', timestamp) as hour_bucket,
+                   AVG(moisture_value) as avg_value
+            FROM moisture_data
+            WHERE device_id = %s AND timestamp BETWEEN %s AND %s
+            GROUP BY hour_bucket
+            ORDER BY hour_bucket ASC
+        """, (device_id, training_data_start_time, latest_timestamp))
         
-        current_value = float(current[0])
-        current_timestamp = current[1]
+        data = cursor.fetchall()
         
+        if len(data) < 10: # Need enough data to train
+            logger.warning(f"Not enough data (<10 points) for prediction for device {device_id}.")
+            return jsonify([]), 200
+
+        # 2. Prepare data for ARIMA model using pandas
+        df = pd.DataFrame(data, columns=['timestamp', 'value'])
+        df.set_index('timestamp', inplace=True)
+        
+        # Explicitly convert 'value' column to a numeric type, coercing errors
+        df['value'] = pd.to_numeric(df['value'], errors='coerce')
+
+        # Ensure the frequency is set to hourly, filling missing values
+        df = df.asfreq('h', method='ffill')
+        
+        series = df['value']
+        
+        # 3. Fit the ARIMA model
+        # Using a common order (p,d,q) = (5,1,0).
+        # p=5: uses last 5 observations. d=1: uses first-order differencing. q=0: no moving average term.
+        # Supress convergence warnings from the model fit
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            model = ARIMA(series, order=(5, 1, 0))
+            model_fit = model.fit()
+        
+        # 4. Forecast the next 12 hours
+        forecast = model_fit.forecast(steps=12)
+        
+        # 5. Format the response
         predictions = []
-        for i in range(1, 13):
-            target_hour = (current_timestamp + timedelta(hours=i)).hour
-            three_days_ago = current_timestamp - timedelta(days=3)
-            
-            cursor.execute("""
-                SELECT AVG(moisture_value) FROM moisture_data
-                WHERE device_id = %s
-                AND timestamp >= %s
-                AND EXTRACT(HOUR FROM timestamp) = %s
-            """, (device_id, three_days_ago, target_hour))
-            avg_last_3_days = cursor.fetchone()
-            
-            if avg_last_3_days[0]:
-                predicted_value = (float(avg_last_3_days[0]) + current_value) / 2
-            else:
-                predicted_value = current_value
+        last_timestamp = series.index[-1]
+        for i, value in enumerate(forecast):
+            # Ensure value is not negative
+            predicted_value = max(0, value)
             
             predictions.append({
                 'value': round(predicted_value, 2),
-                'timestamp': (current_timestamp + timedelta(hours=i)).strftime('%H:%M')
+                'timestamp': (last_timestamp + timedelta(hours=i + 1)).strftime('%H:%M')
             })
-            current_value = predicted_value
 
-        logger.info(f"Returning {len(predictions)} predicted data points")
+        logger.info(f"Returning {len(predictions)} ARIMA-predicted data points for {device_id}")
         
         cursor.close()
         conn.close()
         return jsonify(predictions)
         
-    except psycopg2.Error as e:
-        logger.error(f"Database error during next 12h fetch: {e}")
-        return jsonify({'error': f"Database error: {str(e)}"}), 500
     except Exception as e:
-        logger.error(f"Unexpected error during next 12h fetch: {e}")
-        return jsonify({'error': f"Error: {str(e)}"}), 500
+        logger.error(f"Error during ARIMA prediction for {device_id}: {e}")
+        return jsonify({'error': f"ARIMA prediction failed: {str(e)}"}), 500
 
 if __name__ == '__main__':
     # Start the MQTT client
@@ -382,7 +411,5 @@ if __name__ == '__main__':
         sys.exit("Exiting due to MQTT connection failure.")
         
     # Start the Flask server
-    # Note: Flask's development server is not ideal for production.
-    # The 'use_reloader=False' is important to prevent running the setup code twice.
     port = int(os.environ.get('PORT', 3000))
     app.run(host='0.0.0.0', port=port, use_reloader=False) 
