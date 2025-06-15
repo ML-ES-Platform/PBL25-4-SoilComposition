@@ -76,10 +76,26 @@ copy config.py.example config.py
 # For macOS/Linux
 cp config.py.example config.py
 ```
-Now, open `config.py` and fill in your actual credentials for your PostgreSQL database and your HiveMQ Cloud cluster.
+Now, open `config.py` and fill in your actual credentials for your PostgreSQL database and your HiveMQ Cloud cluster. The `dbname` you choose will be created in the next step.
 
 **e. Setup the Database:**
-Ensure your PostgreSQL server is running. The backend will automatically create the necessary `moisture_data` table when it first receives a message.
+
+Once you have configured your `config.py` with your desired database name and superuser credentials (like the default `postgres` user), run the initialization script. This will create the database and the required `moisture_data` table for you.
+
+```bash
+# From the /Backend directory
+python init_db.py
+```
+
+**f. Populate with Sample Data (Optional):**
+
+To see the historical graphs working immediately, you can populate the database with sample data from the last 7 days. Make sure your backend is **not** running, then run the following script:
+
+```bash
+# From the /Backend directory
+python insert_historical_data.py
+```
+This will fill your database with realistic historical data.
 
 ### 3. Frontend Setup
 

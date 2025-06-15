@@ -206,6 +206,33 @@ def get_last_12h(device_id):
         logger.error(f"API Error in /last12h: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/moisture/<device_id>/last1h', methods=['GET'])
+def get_last_1h(device_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        sixty_minutes_ago = datetime.utcnow() - timedelta(hours=1)
+
+        cursor.execute("""
+            SELECT AVG(moisture_value) as avg_value, 
+                   DATE_TRUNC('minute', timestamp) as minute_bucket
+            FROM moisture_data
+            WHERE device_id = %s AND timestamp >= %s
+            GROUP BY minute_bucket 
+            ORDER BY minute_bucket ASC
+        """, (device_id, sixty_minutes_ago))
+        
+        data = cursor.fetchall()
+        result = [{'value': round(float(row[0]), 2), 'timestamp': row[1].strftime('%H:%M')} for row in data]
+        
+        cursor.close()
+        conn.close()
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"API Error in /last1h: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/moisture/<device_id>/last24h', methods=['GET'])
 def get_last_24h(device_id):
     try:

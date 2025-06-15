@@ -6,7 +6,7 @@ interface GraphProps {
     deviceId: string;
 }
 
-const GraphLast12H: React.FC<GraphProps> = ({ deviceId }) => {
+const GraphLast1H: React.FC<GraphProps> = ({ deviceId }) => {
     const [chartData, setChartData] = useState<ChartData<'line'>>({
         labels: [],
         datasets: [{
@@ -51,4 +51,4 @@ const GraphLast12H: React.FC<GraphProps> = ({ deviceId }) => {
     );
 };
 
-export default GraphLast12H; 
+export default GraphLast1H;
