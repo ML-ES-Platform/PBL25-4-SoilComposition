@@ -4,9 +4,8 @@ import json
 import threading
 import random
 import sys
+import argparse
 from config import MQTT_PARAMS
-
-# --- Sensor Simulation ---
 
 def create_emulated_sensor(device_id: str):
     """
@@ -36,7 +35,13 @@ def create_emulated_sensor(device_id: str):
     topic = f"sensors/moisture/{device_id}"
     while True:
         try:
-            moisture_value = round(random.uniform(25.0, 75.0), 2)
+            # Simulate a plausible moisture range, e.g., 20% to 80%
+            # with occasional spikes to test boundaries (0-100%).
+            if random.random() < 0.05:  # 5% chance of an extreme value
+                moisture_value = round(random.uniform(0, 100), 2)
+            else:
+                moisture_value = round(random.uniform(20, 80), 2)
+            
             payload = json.dumps({"moisture_value": moisture_value})
             
             # Publish with the retain flag set to True
@@ -47,7 +52,8 @@ def create_emulated_sensor(device_id: str):
             else:
                 print(f"[Sensor {device_id}]: Failed to send message to topic `{topic}`")
 
-            time.sleep(random.randint(8, 15)) # Send data at a random interval
+            # Send data at a random interval
+            time.sleep(random.randint(8, 15))
 
         except KeyboardInterrupt:
             print(f"[Sensor {device_id}]: Simulation stopped.")
@@ -59,20 +65,34 @@ def create_emulated_sensor(device_id: str):
     client.loop_stop()
     client.disconnect()
 
-
 # --- Main Execution ---
 
 if __name__ == "__main__":
-    num_sensors = 2  # Default number of sensors to simulate
-    if len(sys.argv) > 1:
-        try:
-            num_sensors = int(sys.argv[1])
-            if num_sensors <= 0:
-                raise ValueError()
-        except (ValueError, IndexError):
-            print("Invalid argument. Please provide a positive integer for the number of sensors.")
-            print("Usage: python emulated_sensor.py <number_of_sensors>")
-            sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Emulated IoT Sensor",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog="""
+Usage examples:
+  # Start 2 emulated sensors (default)
+  python emulated_sensor.py
+
+  # Start 5 emulated sensors
+  python emulated_sensor.py 5
+"""
+    )
+    parser.add_argument(
+        "number_of_sensors", 
+        type=int, 
+        nargs="?", 
+        default=2, 
+        help="Number of sensors to simulate (default: 2)"
+    )
+    args = parser.parse_args()
+
+    num_sensors = args.number_of_sensors
+    if num_sensors <= 0:
+        print("Invalid argument. Please provide a positive integer for the number of sensors.")
+        sys.exit(1)
 
     print(f"Starting {num_sensors} emulated sensor(s)...")
 
@@ -92,4 +112,5 @@ if __name__ == "__main__":
             time.sleep(1)
     except KeyboardInterrupt:
         print("\nShutting down all sensors.")
+        # Threads are daemons, so they will exit automatically
         sys.exit(0) 

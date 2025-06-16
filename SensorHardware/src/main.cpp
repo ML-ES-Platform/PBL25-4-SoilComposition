@@ -1,17 +1,19 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <WiFiClientSecure.h>
 
 // --- WIFI & MQTT Configuration ---
 // Wifi
 #define WIFI_SSID "YOUR_WIFI_SSID"
+// For open networks (no password), leave WIFI_PASSWORD as an empty string: ""
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 
 // MQTT Broker
-#define MQTT_BROKER "YOUR_HIVEMQ_CLUSTER_URL"
+#define MQTT_BROKER "9e862c744fbd4909800bc2d576a7fd78.s1.eu.hivemq.cloud"
 #define MQTT_PORT 8883
-#define MQTT_USER "YOUR_HIVEMQ_USERNAME"
-#define MQTT_PASSWORD "YOUR_HIVEMQ_PASSWORD"
+#define MQTT_USER "alexandrina"
+#define MQTT_PASSWORD "PBL_iot_223"
 
 // --- SENSOR Configuration ---
 #define DEVICE_ID "real001" // Unique ID for this sensor
@@ -81,14 +83,22 @@ void loop() {
   if (now - lastMsg > MSG_PUBLISH_INTERVAL) {
     lastMsg = now;
 
-    // Read sensor value
-    int moistureValue = analogRead(SOIL_MOISTURE_PIN);
-    Serial.print("Soil Moisture: ");
-    Serial.println(moistureValue);
+    // Read raw sensor value (0-4095)
+    int rawValue = analogRead(SOIL_MOISTURE_PIN);
+    
+    // Map the raw value to a percentage (0-100%)
+    // Assuming 4095 is dry and 0 is wet. You might need to calibrate these values.
+    int moisturePercent = map(rawValue, 4095, 0, 0, 100);
+
+    Serial.print("Raw Value: ");
+    Serial.print(rawValue);
+    Serial.print(" -> Moisture: ");
+    Serial.print(moisturePercent);
+    Serial.println("%");
 
     // Create JSON payload
     StaticJsonDocument<128> doc;
-    doc["moisture_value"] = moistureValue;
+    doc["moisture_value"] = moisturePercent;
 
     char buffer[128];
     serializeJson(doc, buffer);
